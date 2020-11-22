@@ -1,0 +1,73 @@
+I"�<p style="text-align: center;"><img src="../assets/img/picohsm/board.jpg" width="450" height="325" /></p>
+<h1 id="introduction">Introduction</h1>
+<p>This article presents one (very hard) way of solving the picoHSM challenge series released during the Donjon Ledger 2020 CTF. This harware/pwn challenge was divided into three steps involving <strong>buffer overflow</strong> exploitation, a <strong>timing attack</strong> and a <strong>clock glitching attack</strong> on a remote board running STM32 and ATMEGA128 microcontrollers.</p>
+
+<p>Because of an initial confusion during step 1, I thought that the stack was not executable and ended up building overly complicated exploits using ROP for step 2 and 3. Apparently, stack was not really located where I thought it was and was executable. Anyway, even though there were easier solutions to this challenge, I still had a lot of fun doing it and it was nice to get some practice on embedded system exploitation.</p>
+
+<p>Thanks to the <a href="https://twitter.com/DonjonLedger">Donjon Ledger</a> team for this amazing CTF which was full of original and interesting challenges such as this one.</p>
+
+<h1 id="overview">Overview</h1>
+<p>The target of this challenge is a Hardware Security Module (HSM) board exposing a service accessible from the network:</p>
+
+<p style="text-align: center;"><img src="../assets/img/picohsm/init.PNG" /></p>
+
+<p>A quick enumeration using the provided picture of the board gives us the two main components of the HSM:</p>
+<ul>
+  <li><strong>MCU</strong>: STM32F205 (ARM) microcontroller which handle high-level communications and user inputs treatment. It can be seen as the front end of the HSM and contains the code of the accessible service.</li>
+  <li><strong>SEC</strong>: ATMEGA1284P (AVR) “secure element”. It is responsible for performing the cryptographic tasks requested by the MCU (PIN verification, message encryption &amp; decryption).</li>
+</ul>
+
+<p>These two elements <strong>communicate together using USART</strong> (Universal synchronous &amp; Asynchronous Receiver Transmitter). The two other chips that can be seen on the PCB are used to perform USB to UART (FTDI) + Ethernet (W5500) and are not interesting for this challenge.</p>
+
+<h1 id="mcu-firmware-reverse-engineering">MCU firmware reverse engineering</h1>
+
+<p>Only the firmware of the MCU is provided during step 1. Often, when conducting black-box security analysis on embedded systems, the firmware is obtained in raw format, for instance by physically dumping the content of a flash memory. Therefore, there is usually a bit of work and datasheet reading involved to correctly load the firmware in an analysis tool.</p>
+
+<p>This is not the case here since the binary is given in <strong>ELF format</strong> which is natively supported by all the disassemblers. Moreover, the ELF is <strong>not stripped</strong>, which means that all the symbols (function, variable names…) are still present on the firmware. Overall, this makes the reverse engineering and understanding of the MCU quite painless. Here is an extract of the firmware loaded in IDA:</p>
+
+<p>INSERT PICTURE</p>
+
+<p>As shown on the above picture, the disassembly is pretty clean except for those weird addresses that are not in any memory range defined by IDA.</p>
+
+<p>On microcontrollers such as the STM32F205, the firmware executed by the CPU needs to configure and interact with various peripherals. To do that, each peripheral is mapped to a dedicated region of the physical memory. By reading or writing to this region of memory, the firmware can access or modify the configuration of the peripheral. For instance, let’s say you have a LED mapped at address 0x40002000; by writing a 1 to that address, the firmware can turn the LED on.</p>
+
+<p>The mapping of the different peripherals and the definition of the associated configuration registers are defined in the STM32F205 datasheet:</p>
+
+<p>INSERT picture</p>
+
+<p>Adding those information to IDA improves the quality of the disassembly. This can be done by manually creating segments and structures using the datasheet. Fortunately, this process has already been automated for the STM32F205 with <a href="https://github.com/stef/idapro-cortex-m-hwregs">this IDA script</a>.</p>
+
+<p>INSERT picture</p>
+
+<p>With all these information, the reverse engineering process is pretty quick. The MCU exposes the following functionalities:</p>
+<ul>
+  <li><strong>PIN verification</strong>: MCU receives a PIN input by the user and sends it over USART to SEC. SEC compares this PIN to the right PIN hardcoded in its memory and sends the result back to the MCU.</li>
+  <li><strong>Encryption/decryption</strong>: by providing the right PIN, the user can encrypt or decrypt data on demand using 8 different keys (0-7). Once again the (PIN, KEYID, data) tuple is send over USART by MCU to SEC which answers with the encrypted/decrypted data.</li>
+  <li><strong>Get flag</strong>: this special commands asks for a debug key to activate a debug mode which is off by default. If the provided debug key is correct, the MCU sends back a flag contained in its memory.</li>
+</ul>
+
+<h1 id="step-1-buffer-overflow-exploitation">Step 1: buffer overflow exploitation</h1>
+
+<p>The goal of the first step is to extract the flag contained in MCU’s memory. Since the debug key is generated randomly at each execution of the MCU, it cannot be guessed by an attacker. Therefore, the only way to get the flag is to find and exploit a vulnerability on the MCU.</p>
+
+<p>Indeed, after a short analysis of the disassembly, an obvious buffer overflow vulnerability can be found on the function responsible for receiving user commands:</p>
+
+<p>INSERT CAPTURE</p>
+
+<p>The user can send up to 0x400 bytes of input which is stored on a stack buffer of size 0x300. Thus, an attacker can overflow the buffer to override the saved LR value on the stack, which will redirect the execution flow during the vulnerable function’s epilogue.</p>
+
+<p>When the vulnerable function returns, the stack’s layout is as follows:</p>
+
+<p>INSERT SCHEMA</p>
+
+<p>My plan was to return to the address of what I called <code class="language-plaintext highlighter-rouge">print_flag</code>:</p>
+
+<p>INSERT CAPTURE</p>
+
+<p>As shown on the above picture, for this approach to work, the address of the socket structure must be stored in <code class="language-plaintext highlighter-rouge">R4</code> when the exploit is triggered. Since the vulnerable function ends with a <code class="language-plaintext highlighter-rouge">POP {R4, PC}</code>, we can meet this condition by putting the socket structure address before the <code class="language-plaintext highlighter-rouge">print_flag</code> address on our payload.</p>
+
+<h1 id="timing-attack-on-the-pin-verification">Timing attack on the PIN verification</h1>
+
+<h1 id="clock-glitching">Clock glitching</h1>
+
+:ET

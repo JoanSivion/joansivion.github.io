@@ -1,0 +1,229 @@
+I"2<p class="text-justify">This article is the second of the series about my ongoing journey to get started in vulnerability research. It presents the steps I took to rediscover a 2016 vulnerability (SVE-2016-7173) on the OTP trusted application of the Samsung S6 trusted environment.</p>
+
+<h2 id="introduction">Introduction</h2>
+
+<p class="text-justify">In the previous article, I presented the <em>“Practice like Ben Franklin”</em> idea from <a href="https://www.youtube.com/watch?v=39yPeiY808w">Ned Williamson’s talk</a> and how he used it to improve his code auditing skills. For reminder, the approach consists in taking an existing bug report an then trying to “rediscover” the bug just by looking at the description. In this article, I present the way I applied this idea to improve my vulnerability research skills.</p>
+
+<h2 id="picking-a-target">Picking a target</h2>
+
+<p class="text-justify">First, I need to pick a target that I will enjoy working on. Recently, I have been really curious about ARM Trustzone &amp; Trusted Execution Environment (TEE) and read a lot of articles on the subject. Therefore, it would be a nice occasion to apply all this theoritical knowledge on a practical case.</p>
+
+<h3 id="arm-trustzone--trusted-execution-environment-tee">ARM Trustzone &amp; Trusted Execution Environment (TEE)</h3>
+
+<h3 id="google-project-zero-bug-tracker">Google Project Zero Bug Tracker</h3>
+
+<p class="text-justify">A interesting resource to find bug reports is the <a href="https://bugs.chromium.org/p/project-zero/issues/list">Google Project Zero Bug Tracker</a>. It contains all the bugs that have been disclosed by Google’s research team with a description, proof of concepts and the timeline of the disclosure.
+By filtering the issues with the keyword “Trustzone”, I obtained the following list:</p>
+
+<p><img src="../assets/img/entry2/00_project_zero_issues_trustzone.PNG" alt="image" />
+<em>Project Zero Trustzone issues</em></p>
+
+<p class="text-justify">I decided to have a look at <code class="language-plaintext highlighter-rouge">Issue 938: Samsung: Stack buffer overflow in OTP TrustZone trustlet</code>. Stack based buffer overflows are generally quite straightforward to find and working on a trustlet binary in S-EL0 should not be too different from working on a regular linux binary. Therefore, it seemed like a good candidate for this first experiment.</p>
+
+<p class="text-justify">The title of the issue contains both the type of the vulnerability and its general location. The last piece of information we miss is the version of the vulnerable firmware. We can find it in the comments of the issue (be careful not too look at the details of the bug to play along with the rules of the experiment):</p>
+
+<p><img src="../assets/img/entry2/01_firmware_version.PNG" alt="image" />
+<em>Vulnerable firmware version</em></p>
+
+<p>We should now have everything we need, so let’s get started !</p>
+
+<h2 id="getting-the-vulnerable-trustlet">Getting the vulnerable trustlet</h2>
+
+<h3 id="downloading-the-firmware">Downloading the firmware</h3>
+
+<p class="text-justify">The first step is to get the vulnerable firmware. Since we have its reference, a simple Google search is enough to find it. I downloaded it on this website : https://www.theandroidsoul.com/samsung-galaxy-s6-edge-firmware/.</p>
+<p class="text-justify">After uncompressing the archive, we obtain the following files :</p>
+
+<ul>
+  <li>boot.img</li>
+  <li>cache.img</li>
+  <li>cm.bin</li>
+  <li>modem.bin</li>
+  <li>recovery.img</li>
+  <li>sboot.bin</li>
+  <li>system.img</li>
+</ul>
+
+<p class="text-justify">The file that interests us here is the system.img which contains the phone’s filesystem. Indeed, for the Samsung S6, the trustlet binaries are stored in plaintext on the filesystem.</p>
+<p class="text-justify">The image has the following format:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>file system.img
+<span class="go">system.img: Android sparse image, version: 1.0, Total of 1121280 4096-byte output blocks in 5077 input chunks.
+</span></code></pre></div></div>
+
+<p>To mount it, I first tried the following commands which failed miserably:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>mount <span class="nt">-o</span> loop <span class="nt">-t</span> ext4 system.img android_root/
+</code></pre></div></div>
+
+<p>After a bit of Googling, I realized that I first needed to convert the image with simg2img:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>simg2img system.img system_raw.img
+<span class="gp">$</span><span class="w"> </span>file system_raw.img
+<span class="go">system_raw.img: Linux rev 1.0 ext4 filesystem data, UUID=57f8f4bc-abf4-655f-bf67-946fc0f9f25b (needs journal recovery) (extents) (large files)
+</span></code></pre></div></div>
+
+<p>I can now use the first command to mount and explore the phone’s filesystem.</p>
+
+<h3 id="finding-the-trustlet">Finding the trustlet</h3>
+
+<p class="text-justify">On Kinibi TEE, trustlets binaries are stored in plaintext on the filesystem. I found them in the /app/mcRegistry/ directory:</p>
+
+<p>TO DO : ls and copy output</p>
+
+<p class="text-justify">Then, to find the OTP trustlet I used grep to look for the binary with the highest count of the string “OTP” :</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span><span class="nb">grep</span> <span class="nt">-inr</span> <span class="nb">.</span> <span class="nt">-e</span> OTP <span class="nt">-c</span>
+</code></pre></div></div>
+
+<p>TO DO : add grep output inside console (not an image !)</p>
+
+<p class="text-justify">The binary with the best score contains the string “TA OTP: Starting” which confirms that it is the OTP trustlet.</p>
+
+<h2 id="reversing-the-otp-trustlet">Reversing the OTP trustlet</h2>
+
+<h3 id="loading-the-binary-in-ghidra">Loading the binary in Ghidra</h3>
+
+<p class="text-justify">Even though I am more familiar with IDA Pro which I use in my daily job, I chose to use Ghidra to analyze the OTP truslet. I thought it would be a good opportunity to get familiar with a new tool.
+The trustlet uses a custom file format called Mobicore Loadable Format (MCLF) which is not supported in the default install of Ghidra:</p>
+
+<p>INSERT CAPTION</p>
+
+<p class="text-justify">We can still load it as a raw binary and Ghidra will manage to analyze some function, but it will be far from perfect… Fortunately, Quarkslab has already ported Gassan Idriss’s MCLF IDA loader to Ghidra, so we can use it do load the binary.</p>
+
+<p>It was my first time installing a plugin in Ghidra so I documented the procedure:</p>
+<ul>
+  <li>Download the plugin from Quarkslab github;</li>
+  <li>Install gradle and build the plugin by specifying Ghidra’s installation directory;</li>
+  <li>Add the generated ZIP archive in the \ghidra_9.1.1_PUBLIC\Extensions\Ghidra\ directory;</li>
+  <li>In Ghidra’s launch menu, use File -&gt; Install Extensions</li>
+</ul>
+
+<p>We can now use the installed extension to load the MCLF OTP trustlet:</p>
+
+<h3 id="enhancing-the-disassembly">Enhancing the disassembly</h3>
+
+<h4 id="resolving-tlapi-calls">Resolving tlAPI calls</h4>
+
+<p class="text-justify">Now that the trustlet binary is correctly loaded into Ghidra, we can start the analysis. However, there is one more thing we can do before completly diving into the bug hunt.
+Even though the trustlet binary is stripped of its symbols, we can still recover some of them. The Kinibi TEE contains a library called McLib which is used by all the trustlets to perform many tasks. This library is loaded at a fixed offset in all the TA. The McLib functions used by trustlets starts with tlApi. Here is an example of a call to one of the function:</p>
+
+<p>INSERT CAPTION</p>
+
+<p class="text-justify">To make a call, the binary jumps to the tlApiEntryPoint and specify the number of the function it needs in R0. By looking at this value, we can identify, rename the function and modify its signature in Ghidra’s disassembly. Once again, Quarkslab provides a Ghidra script that does this task among other things to enchance the disassembly:</p>
+
+<p>INSERT Caption</p>
+
+<h4 id="renaming-functions-with-debug-strings">Renaming functions with debug strings</h4>
+
+<p class="text-justify">While I was looking at the TA’s strings, I noticed that there was a large amount of debugging strings in the binary. This makes the reverse engineering process a lot easier because many of these strings contain the name of the function where they are used.</p>
+<p class="text-justify">Therefore, in order to enhance the disassembly, I made a small Ghidra script that automatically renames the functions using their debugging strings.</p>
+
+<p>INSERT CAPTION</p>
+
+<h3 id="general-routine-of-the-trustlet">General routine of the trustlet</h3>
+
+<p>After applying all the scripts of the previous sections, we now have code that is quite easy to read especially with Ghidra’s decompiler. The global behaviour of the OTP TA is the following:</p>
+<ul>
+  <li>The main routine contains an infinite loop that waits for commands using tlApiWaitNotification().</li>
+  <li>When a command is received, the TCI buffer that contains the id of the commands and its data is passed to the otp_cmd_handler function.</li>
+  <li>The command corresponding to the received id is executed and the response is written to the TCI buffer.</li>
+</ul>
+
+<p>Thanks to the debugging strings, we can easily identify the names of the available commands:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>cmd_name</th>
+      <th>id</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>OTP_INIT</td>
+      <td>0x0</td>
+    </tr>
+    <tr>
+      <td>OTP_CREATE_TOKEN</td>
+      <td>0x1</td>
+    </tr>
+    <tr>
+      <td>OTP_GENERATE_OTP</td>
+      <td>0x2</td>
+    </tr>
+    <tr>
+      <td>OTP_RESYNC_TOKEN</td>
+      <td>0x4</td>
+    </tr>
+    <tr>
+      <td>OTP_SET_DB_HMAC_DATA</td>
+      <td>0x5</td>
+    </tr>
+    <tr>
+      <td>OTP_GET_DB_HMAC_DATA</td>
+      <td>0x6</td>
+    </tr>
+    <tr>
+      <td>OTP_GET_CRYPTO_HMAC</td>
+      <td>0x7</td>
+    </tr>
+    <tr>
+      <td>OTP_GET_CRYPTO_DERIVED_KEY</td>
+      <td>0x8</td>
+    </tr>
+    <tr>
+      <td>OTP_PARSE_CERTIFICATE</td>
+      <td>0x9</td>
+    </tr>
+    <tr>
+      <td>OTP_GENERIC_WRAP</td>
+      <td>0xa</td>
+    </tr>
+    <tr>
+      <td>OTP_GENERIC_UNWRAP</td>
+      <td>0xb</td>
+    </tr>
+    <tr>
+      <td>OTP_DSKPP_GEN_RC</td>
+      <td>0xc</td>
+    </tr>
+    <tr>
+      <td>OTP_DSKPP_GEN_AD</td>
+      <td>0xd</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Now that we have a global idea of how the truslet works, we can start looking for the stack based buffer overflow in the command handlers.</p>
+
+<h2 id="finding-the-bug">Finding the bug</h2>
+
+<h3 id="static-analysis">Static analysis</h3>
+
+<p class="text-justify">Since we know we are looking for a buffer overflow, we could first try identify the memcpy function and see if some command handlers are using directly with data from the TCI buffer.
+After skimming through the code, I quickly found a function that looked like memcpy and listed all the functions that were using it:</p>
+
+<p>INSERT CAPTION (right click -&gt; Ref -&gt; Call Tree)</p>
+
+<p>Then I examined them one by one looking for a buffer overflow.</p>
+
+<p>After some time, I stumbled about a suspicious call in the unwrap function:</p>
+
+<p>INSERT CAPTION</p>
+
+<p class="text-justify">Data from the TCI buffer is copied to a fixed size stack buffer with a length provided in the TCI buffer. By providing a length superior to the size of the stack buffer, an attacker can overflow this buffer and redirect the execution of the OTP TA.</p>
+
+<h3 id="emulating-the-otp-trustlet">Emulating the OTP trustlet</h3>
+<p class="text-justify">Even though I do not own a Samsung S6 phone, I still wanted to confirm that this vulnerability could be triggered. To do so, I used the Python emulator developped by Quarkslab based on Unicorn.
+The version available on Github do not contain tlApi calls, so I added a minimal implementation for some of them including the one used for logging (tlApiLogvPrintf). Here is the output of the emulator, when calling the vulnerable OTP_GENERATE_OTP command with a buffer size inferior to the size of the destination buffer in unwrap:</p>
+
+<p>INSERT CAPTION</p>
+
+<p>Now let’s call the same command, with a buffer size superior to the size of the vulnerable stack buffer:</p>
+
+<p>INSERT CAPTION</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+:ET

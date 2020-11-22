@@ -1,0 +1,165 @@
+I"�"<h2 id="introduction">Introduction</h2>
+
+<p>Last month, I participated to the Pwn2Win CTF organized by the Epic Leet team, a Brazilian CTF team. During the CTF, I worked on <code class="language-plaintext highlighter-rouge">Future Message</code> which was a set of four Windows exploitation challenges relying on variations of the same vulnerable binary.</p>
+
+<p>The vulnerabilities present in the binary are very similar from step 1 to step 4, but the exploitation gets more difficult as you advance in the set.</p>
+
+<p>I don’t have a lot of experience with Windows exploitation. I learned the basics of stack exploitation by reading <a href="https://www.corelan.be/index.php/2009/07/19/exploit-writing-tutorial-part-1-stack-based-overflows/">Corelan</a> and <a href="https://www.fuzzysecurity.com/tutorials/expDev/1.html">FuzzySecurity</a>’s awesome articles on the subject but never got the motivation to dig deeper. Nonetheless, I really enjoyed this series of challenges and thought it was a nice introduction to Windows heap exploitation for neophytes like me.</p>
+
+<p>Therefore, I took this as an opportunity to extend my knowledge on the subject and share with others what I learned in the process. In this series of article, we will alternate between theoretical discussion on what I understand about the heap internals and practical parts where we will make progress on the challenge resolution. The idea is to learn about a concept/technique and directly apply it on the challenge.</p>
+
+<h2 id="environment">Environment</h2>
+
+<p>In order to work through the challenge, I will use the following environment:</p>
+<ul>
+  <li>A machine running Windows 10 1809</li>
+  <li>IDA 7.0 free for disassembling</li>
+  <li>WinDbg (you can download it <a href="https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/debugger-download-tools">here</a>)</li>
+  <li>Visual Studio to compile C/C++ code on Windows</li>
+  <li>Python with pwntools installed on WSL (Windows Subsystem for Linux) to write the exploitation code</li>
+</ul>
+
+<p>If you wish to follow along, feel free to use your favorite tools to perform similar tasks. I just recommend sticking to WinDbg because of all the nice commands it has to display Windows heap structures.</p>
+
+<h2 id="windows-heap-fundamentals">Windows Heap fundamentals</h2>
+
+<h3 id="windows-memory-allocators--nt-heap-vs-segment-heap">Windows Memory Allocators : NT Heap vs Segment Heap</h3>
+
+<p>There are currently two different heap implementations on Windows 10:</p>
+<ul>
+  <li><strong>The NT Heap</strong>:
+    <ul>
+      <li>Traditional memory allocator</li>
+      <li>Default for most windows applications</li>
+    </ul>
+  </li>
+  <li><strong>The Segment Heap</strong>:
+    <ul>
+      <li>Introduced with Windows 10</li>
+      <li>Processes that want to use it have to opt-in</li>
+      <li>Default for Microsoft Edge, Windows store applications and some system processes (<em>csrss.exe, lsass.exe, runtimebroker.exe, services.exe, smss.exe, svchost.exe</em>)</li>
+    </ul>
+  </li>
+</ul>
+
+<p>These two heap implementations use different algorithms for memory allocations. Therefore, before exploiting a vulnerability on a target, it is important to know which implementation it uses. You can check whether a program uses NT Heap or Segment Heap (or both) using the following command in WinDBG:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">!heap
+</span></code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="../assets/img/firefox_heaps.PNG" alt="image" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">Firefox uses NT Heap</td>
+    </tr>
+  </tbody>
+</table>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="../assets/img/edge_heaps.PNG" alt="image" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">Edge uses NT Heap and Segment Heap</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>As shown in the capture above, Firefox uses NT Heap whereas Edge uses both NT Heap and Segment Heap.</p>
+
+<p>In this series of article, <strong>we will focus on the NT Heap</strong>. For more information about the Segment Heap I recommend you to read <a href="https://www.blackhat.com/docs/us-16/materials/us-16-Yason-Windows-10-Segment-Heap-Internals-wp.pdf">Mark Yason’s paper</a> on the subject.</p>
+
+<p>By now, if windows heap internals are new to you, one thing may be bothering you : <em>why are there several heaps on the example above</em> ?  We’ll answer this question in the next part.</p>
+
+<h3 id="default-process-heap-vs-private-heaps">Default Process Heap vs Private Heaps</h3>
+
+<p>Each process has a <strong>default heap</strong> provided by the system. In addition to that, developers can create other heaps for the process by calling <a href="https://docs.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapcreate">HeapCreate</a>. This function returns a handle to a <strong>private heap</strong> that can be used for memory allocation.</p>
+
+<p><em>Examples:</em></p>
+
+<p>Let’s start by creating an empty program and observing its memory with WinDBG:</p>
+<div class="language-c++ highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include &lt;Windows.h&gt;
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+<span class="p">{</span>
+	<span class="n">system</span><span class="p">(</span><span class="s">"PAUSE"</span><span class="p">);</span>
+	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="../assets/img/empty_program_heap.PNG" alt="image" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">The only heap of the process is the default heap</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Since we didn’t make any call to <a href="https://docs.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapcreate">HeapCreate</a>, the only heap of the process is the default heap. Let’s add those calls and see what happens:</p>
+
+<div class="language-c++ highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#include &lt;Windows.h&gt;
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+<span class="p">{</span>
+	<span class="n">HANDLE</span> <span class="n">hPrivateHeap1</span><span class="p">,</span> <span class="n">hPrivateHeap2</span><span class="p">;</span>
+
+	<span class="n">hPrivateHeap1</span> <span class="o">=</span> <span class="n">HeapCreate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="n">hPrivateHeap2</span> <span class="o">=</span> <span class="n">HeapCreate</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+
+	<span class="n">system</span><span class="p">(</span><span class="s">"PAUSE"</span><span class="p">);</span>
+
+	<span class="n">HeapDestroy</span><span class="p">(</span><span class="n">hPrivateHeap1</span><span class="p">);</span>
+	<span class="n">HeapDestroy</span><span class="p">(</span><span class="n">hPrivateHeap2</span><span class="p">);</span>
+	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="../assets/img/private_heaps.PNG" alt="image" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">The program now contains several heaps</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Because of the two <a href="https://docs.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapcreate">HeapCreate</a> calls, the process now has three heaps : the default heap and two private heaps. In order to identify which heap is the default one, we can examine the <strong>PEB (Process Environment Block)</strong> using the following WinDBG command:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">dt ntdll!_PEB @$</span>peb
+</code></pre></div></div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="../assets/img/peb_heap_info.png" alt="image" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">Default process heap address in the PEB</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="../assets/img/peb_heap_info.png" alt="image" /></p>
+
+<p><img src="../assets/img/peb_heap_info.png#center" alt="image" /></p>
+
+:ET

@@ -1,0 +1,35 @@
+title: JoanSivion Security Blog
+description: > # this means to ignore newlines until "baseurl:"
+  JoanSivion Security Blog
+permalink: ':title/'
+baseurl: "/blog" # the subpath of your site, e.g. /blog
+url: "" # the base hostname & protocol for your site, e.g. http://example.com
+site-twitter: #if your site has a twitter account, enter it here
+
+# Author Settings
+author: Cyril Mansour # add your name
+author-img: myAvatar.png # add your photo
+about-author: Penetration tester interested in low-level security. I use this blog to write about security related subjects I study and find interesting. Welcome ! :) # add description
+social-twitter: MansourCyril # add your Twitter handle
+social-facebook: # add your Facebook handle
+social-github:  # add your Github handle
+social-linkedin: mansour-cyril # add your Linkedin handle
+social-email: # add your Email address
+
+# Disqus
+discus-identifier: # add your discus identifier
+
+# Tracker
+analytics: # Google Analytics
+
+# Build Settings
+markdown: kramdown
+plugins:
+  - jekyll-sitemap
+  - jekyll-paginate
+  - jemoji
+highlighter: rouge
+paginate: 8
+paginate_path: "/page/:num"
+
+exclude: ["node_modules", "gulpfile.js", "package.json", "yarn.lock"]

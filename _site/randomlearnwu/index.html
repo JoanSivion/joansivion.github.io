@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Donjon Ledger CTF 2020: Random Learn - JoanSivion Security Blog</title>
+
+  <!-- Edit site and author settings in `_config.yml` to make the social details your own -->
+
+    <meta content="JoanSivion Security Blog" property="og:site_name">
+  
+    <meta content="Donjon Ledger CTF 2020: Random Learn" property="og:title">
+  
+  
+    <meta content="article" property="og:type">
+  
+  
+    <meta content="Side channel challenge write up" property="og:description">
+  
+  
+    <meta content="http://localhost:4000/randomlearnwu/" property="og:url">
+  
+  
+    <meta content="2020-11-22T11:32:20+01:00" property="article:published_time">
+    <meta content="http://localhost:4000/about/" property="article:author">
+  
+  
+    <meta content="http://localhost:4000/blog/assets/img/myAvatar.png" property="og:image">
+  
+  
+    
+  
+  
+    
+  
+
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:site" content="@">
+    <meta name="twitter:creator" content="@MansourCyril">
+  
+    <meta name="twitter:title" content="Donjon Ledger CTF 2020: Random Learn">
+  
+  
+    <meta name="twitter:url" content="http://localhost:4000/randomlearnwu/">
+  
+  
+    <meta name="twitter:description" content="Side channel challenge write up">
+  
+  
+    <meta name="twitter:image:src" content="http://localhost:4000/blog/assets/img/myAvatar.png">
+  
+
+	<meta name="description" content="Side channel challenge write up">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+	<meta property="og:image" content="">
+	<link rel="shortcut icon" href="/blog/assets/img/favicon/fav.ico" type="image/x-icon">
+	<link rel="apple-touch-icon" href="/blog/assets/img/favicon/apple-touch-icon.png">
+	<link rel="apple-touch-icon" sizes="72x72" href="/blog/assets/img/favicon/apple-touch-icon-72x72.png">
+	<link rel="apple-touch-icon" sizes="144x144" href="/blog/assets/img/favicon/apple-touch-icon-144x144.png">
+	<!-- Chrome, Firefox OS and Opera -->
+	<meta name="theme-color" content="#263959">
+	<!-- Windows Phone -->
+	<meta name="msapplication-navbutton-color" content="#263959">
+	<!-- iOS Safari -->
+	<meta name="apple-mobile-web-app-status-bar-style" content="#263959">
+	<!-- Google Fonts -->
+	<link href="https://fonts.googleapis.com/css?family=PT+Serif:400,700" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css?family=Lato:300,400,700" rel="stylesheet">
+	<!-- Font Awesome -->
+	<link rel="stylesheet" href="/blog/assets/fonts/font-awesome/css/font-awesome.min.css">
+	<!-- Styles -->
+	<link rel="stylesheet" href="/blog/assets/css/main.css">
+</head>
+
+<body>
+
+  <div class="wrapper">
+    <aside class="sidebar">
+  <header>
+    <div class="about">
+      <div class="cover-author-image">
+        <a href="/blog/"><img src="/blog/assets/img/myAvatar.png" alt="Cyril Mansour"></a>
+      </div>
+      <div class="author-name">Cyril Mansour</div>
+      <p>Penetration tester interested in low-level security. I use this blog to write about security related subjects I study and find interesting. Welcome ! :)</p>
+    </div>
+  </header> <!-- End Header -->
+  <footer>
+    <section class="contact">
+      <h3 class="contact-title">Contact me</h3>
+      <ul>
+        
+          <li><a href="https://twitter.com/MansourCyril" target="_blank"><i class="fa fa-twitter" aria-hidden="true"></i></a></li>
+        
+        
+          <li class="github"><a href="http://github.com/" target="_blank"><i class="fa fa-github" aria-hidden="true"></i></a></li>
+        
+        
+          <li class="linkedin"><a href="https://in.linkedin.com/in/mansour-cyril" target="_blank"><i class="fa fa-linkedin"></i></a></li>
+        
+      </ul>
+    </section> <!-- End Section Contact -->
+    <div class="copyright">
+      <p>2020 &copy; Cyril Mansour</p>
+    </div>
+  </footer> <!-- End Footer -->
+</aside> <!-- End Sidebar -->
+<div class="content-box clearfix">
+  <article class="article-page">
+  <div class="page-content">
+    
+    
+    <div class="wrap-content">
+      <header class="header-page">
+        <h1 class="page-title">Donjon Ledger CTF 2020: Random Learn</h1>
+        <div class="page-date"><span>2020, Nov 22&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+      </header>
+      <p style="text-align: center;"><img src="../assets/img/random_learn/ledger.png" alt="image" /></p>
+
+<h2 id="introduction">Introduction</h2>
+<p class="text-justify">This article presents one way of solving the Random Learn side channel challenge released during the Donjon Ledger 2020 CTF. In side channel challenges, the goal is to retrieve the secret key of a cryptographic algorithm using physical measurements performed while the device was operating (time, power, electromagnetic emanations, temperature…).</p>
+
+<p class="text-justify">Before this competition, our team had almost zero experience with side channel attacks. We learned the basics by reading papers and applying them to the different challenges proposed during the competition. In this article, I describe my understanding of the concepts and techniques we used with a beginner’s point of view. As a consequence, the methodology presented here may appear a bit approximative or even wrong to experienced readers. Do not hesitate to ping me on Twitter if some stuff I write needs to be corrected.</p>
+
+<p class="text-justify">Kudos to my teammate i27, who did an important part of the work for this challenge and took the time to explain me his approach so we could work together to get the flag.</p>
+
+<h2 id="initial-data">Initial data</h2>
+<p>The target for this challenge is an AES execution on a “non-secure” MCU (<em>Microcontroller Unit</em>). The following datasets are provided:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">variable_k_p</code>: 200000 power traces with random known plaintexts and keys;</li>
+  <li><code class="language-plaintext highlighter-rouge">unknown_k</code>: 200 power traces where known plaintexts have been encrypted with the same unknown key.</li>
+</ul>
+
+<p class="text-justify">The goal is to <strong>retrieve the unknown key</strong> used in the second dataset. It appears that the spirit of the challenge is to use the first dataset to infer some relations between<code class="language-plaintext highlighter-rouge">[power, plaintext, keys]</code>and apply them to the second dataset to guess the unknown key. In the next section, we start by working on the first dataset:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="n">power</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">"./variable_k_p/traces.npy"</span><span class="p">)</span>
+<span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">"./variable_k_p/values.npy"</span><span class="p">)</span></code></pre></figure>
+
+<h2 id="what-exactly-are-we-looking-at-">What exactly are we looking at ?</h2>
+<p>Let’s plot one power trace to get a better idea of which part of the AES execution we are dealing with:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="n">plt</span><span class="p">.</span><span class="n">plot</span><span class="p">(</span><span class="n">power</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">plt</span><span class="p">.</span><span class="n">title</span><span class="p">(</span><span class="s">'power[0]'</span><span class="p">)</span>
+<span class="n">plt</span><span class="p">.</span><span class="n">show</span><span class="p">()</span></code></pre></figure>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/power0.png" alt="image" /></p>
+
+<p class="text-justify">A pattern is repeated 16 times in the power trace. This shows that <strong>each byte of the AES state is manipulated independently</strong>, meaning that we are probably dealing with a <strong>8-bit MCU</strong> (on a 32-bits MCU, we might have observed one pattern repeated 4 times). Moreover, the description of the challenge indicates that the “beginning of the AES execution” was captured, so we are probably somewhere inside the <strong>first round</strong>.</p>
+
+<p class="text-justify">Since it’s a classic approach to target SBox outputs in side channel attacks, I am going to make the hypothesis that the power measurement was performed during the <strong>SubBytes</strong> operation (one pattern = one SBox substitution).</p>
+
+<h2 id="correlation-power-analysis-cpa-101">Correlation Power Analysis (CPA) 101</h2>
+
+<p class="text-justify">The fundamental observation exploited in power-based side channel attacks is that, at any point in time, there is a direct relation between the values of the bits transiting on data buses and the power consumption of the device. To put it in a different way, during the AES computation, the power consumption will vary depending on the value of the data manipulated by the algorithm.</p>
+
+<p class="text-justify">One very powerful analysis technique is the <strong>Correlation Power Analysis (CPA)</strong>. Given a sufficient amount of power traces, this technique applies simple, yet powerful statistical tools to extract bytes of an unknown key.</p>
+
+<p class="text-justify">To perform a CPA, you first need to <strong>define a model for the power consumption</strong>. A simple approach that is often used is to model the power consumption at time t as the hamming weight (number of 1 bits) of the data unit (a byte on a 8-bit microcontroller) manipulated at time t.</p>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/model_power.png" alt="image" /></p>
+
+<p><em>Note : The raw byte value can also be chosen in place of the hamming weight. Both are used in the resolution of this challenge and give interesting results.</em></p>
+
+<p class="text-justify">Then, you must <strong>pick an intermediate value that you will target</strong> in the cryptographic algorithm. The idea is to choose a value that depends on the key so you can use it to make key guesses later in the attack. In the case of AES, interesting targets can be identified by looking at the SubBytes operation of the first round:</p>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/correlation2.png" alt="image" /></p>
+
+<p>By targeting <strong>a byte of the state at each SBox output</strong>, we can use the CPA to guess the key bytes<code class="language-plaintext highlighter-rouge">K[i]</code>one by one. The different steps to perform this attack are the following ones:</p>
+<ul>
+  <li>Measure the real power consumption<code class="language-plaintext highlighter-rouge">P</code>for many different plaintexts<code class="language-plaintext highlighter-rouge">pt</code>;</li>
+  <li>For each key guess K_guess:
+    <ul>
+      <li>Compute the theoretical power consumption<code class="language-plaintext highlighter-rouge">P_th_guess = hamming(SBox[pt[i]^K_guess])</code>for all the plaintexts<code class="language-plaintext highlighter-rouge">pt</code></li>
+      <li>For each point in time t, compute the correlation between<code class="language-plaintext highlighter-rouge">P</code>and<code class="language-plaintext highlighter-rouge">P_th_guess</code>using the <a href="https://en.wikipedia.org/wiki/Pearson_correlation_coefficient">Pearson’s coefficient</a>.</li>
+    </ul>
+  </li>
+  <li>The correlation graph that contains the highest correlation value corresponds to<code class="language-plaintext highlighter-rouge">K_guess = K[i]</code></li>
+</ul>
+
+<p class="text-justify">What is really mind-blowing with this attack is that we don’t even need to know at what time<code class="language-plaintext highlighter-rouge">SBox[pt[i]^K[i]]</code>is computed on the real power trace. Indeed, the <code class="language-plaintext highlighter-rouge">K_guess</code>that yields the highest correlation value gives both the value of <code class="language-plaintext highlighter-rouge">K[i]</code>AND the time at which<code class="language-plaintext highlighter-rouge">SBox[pt[i]^K[i]]</code>is computed, thanks to the position of the spike.</p>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/correlation3.png" alt="image" /></p>
+
+<p class="text-justify">Given a sufficient amount of power traces, this approach can be used to easily recover the entire key. Colin O’Flynn, the father of the <a href="https://rtfm.newae.com/">ChipWhisperer</a>, has made an excellent <a href="https://www.youtube.com/watch?v=OlX-p4AGhWs">introduction video</a> on the subject. It really helped me a lot to understand a bit of the magic behind side channel attacks. If you are unfamiliar with this topic, I encourage you to watch his video and come back here after.</p>
+
+<h2 id="first-naive-cpa-attempt">First (naive) CPA attempt</h2>
+<p>Now that we have a bit more background on CPA attacks, let’s get back to the challenge.</p>
+
+<p class="text-justify">The first step of the analysis is to verify on the dataset with known<code class="language-plaintext highlighter-rouge">[plaintext, key]</code>that we obtain high correlations at the output of each SBox. We will then be able to use these <strong>leakage points</strong> to perform the CPA attack on the dataset with the unknown key.</p>
+
+<p class="text-justify">As explained in the previous section, we will model our theoretical power consumption at time t as the hamming weight of the byte manipulated at time t.</p>
+
+<p class="text-justify">Let’s start with the first SBox. We compute <code class="language-plaintext highlighter-rouge">P_th = hamming(SBox[pt[0]^K[0]])</code>for every plaintext and then calculate the correlation with the real power at each point in time.</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">sbox_output_corr</span><span class="p">(</span><span class="n">power</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+    <span class="c1"># Compute theoretical power for SBox idx output
+</span>    <span class="n">P_th</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">power</span><span class="p">)):</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">"plaintext"</span><span class="p">]</span>
+        <span class="n">K</span>  <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">"key"</span><span class="p">]</span>
+        <span class="n">P_th</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">hamming</span><span class="p">(</span><span class="n">SBox</span><span class="p">[</span><span class="n">pt</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">^</span><span class="n">K</span><span class="p">[</span><span class="n">idx</span><span class="p">]]))</span> <span class="c1"># hamming power model
+</span>    <span class="n">P_th</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">array</span><span class="p">(</span><span class="n">P_th</span><span class="p">)</span>
+
+    <span class="c1"># Compute pearson correlation between P_th and P at each point in time
+</span>    <span class="n">P_at_t</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">power</span><span class="p">)</span>
+    <span class="n">correlations</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">P_at_t</span><span class="p">:</span>
+        <span class="n">corr</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">np</span><span class="p">.</span><span class="n">corrcoef</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">P_th</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">correlations</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">corr</span><span class="p">)</span>
+
+    <span class="c1"># Plot
+</span>    <span class="n">plt</span><span class="p">.</span><span class="n">plot</span><span class="p">(</span><span class="n">correlations</span><span class="p">)</span>
+    <span class="n">plt</span><span class="p">.</span><span class="n">ylim</span><span class="p">(</span><span class="n">top</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">plt</span><span class="p">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="c1"># Look for high correlations at the output of the first SBox
+</span><span class="n">sbox_output_corr</span><span class="p">(</span><span class="n">power</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="n">values</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span> <span class="c1"># we don't need all the 200000 traces</span></code></pre></figure>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/fail_cpa.png" alt="image" /></p>
+
+<p class="text-justify">Aaaaaaand… it didn’t work. Unfortunately, there is no correlation spike hidden behind baby Yoda. The same results is obtained for the 16 outputs of the SBox. Just in case, we also performed the following tests:</p>
+
+<ul>
+  <li>Model the power with the raw value of the state byte instead of the hamming weight;</li>
+  <li>Looking for correlations using the values of the key bytes <code class="language-plaintext highlighter-rouge">K[i]</code> instead of the SBox outputs.</li>
+</ul>
+
+<p>The first test did not give anything interesting. For the second test, none of the key bytes yielded a high correlation except<code class="language-plaintext highlighter-rouge">K[15]</code>:</p>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/leak_k15.png" alt="image" /></p>
+
+<p class="text-justify">So it seems that we are able to leak the value of<code class="language-plaintext highlighter-rouge">K[15]</code>. However, without any more information, we are not going to go very far. At this point, we didn’t really know what was wrong with our approach. But at the same time, the challenge would not be worth 300 points if the classic CPA was working directly.</p>
+
+<p class="text-justify">The most probable hypothesis is that they are some <strong>mitigations to prevent the SBox outputs from leaking</strong>. Since, the description mentions a “non-secure MCU”, those potential mitigations are likely implemented at the software level. Time for a bit of Googling !</p>
+
+<h2 id="masking-schemes">Masking schemes</h2>
+<p class="text-justify">After doing some research on the subject, it appears that there are indeed a lot of ways to protect an AES implementation against CPA attacks. One popular family of mitigations is called “masking”. In masking schemes, the idea is to randomly <strong>split every sensitive intermediate variable</strong> occurring in the computation into n+1 shares, where n is called the masking order. An example of a masked AES with order 1 is used in the section 2.5 of the article <a href="https://eprint.iacr.org/2018/053.pdf"><em>Study of Deep Learning Techniques for Side-Channel Analysis and Introduction to ASCAD Database</em></a>. Since the order of the mask is 1 in this example, each byte of the sensitive data is split into two parts:</p>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/masked_aes.png" alt="image" /></p>
+
+<p class="text-justify">Assuming that the AES implementation in this challenge is protected with a similar masking scheme (this assumption may be wrong), let’s see if we get some results by performing a second order attack on the dataset.</p>
+
+<h2 id="looking-for-order-2-leakage-points">Looking for order 2 leakage points</h2>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/order2.png" alt="image" /></p>
+
+<p class="text-justify">In second order attack, the idea is to combine two points (t1, t2) of the power trace where the masked values are manipulated to remove the effect of the masking. For the combining function, two main candidates seem to be used:</p>
+
+<ul>
+  <li>Absolute Difference:<code class="language-plaintext highlighter-rouge">D(t1, t2) = |P(t2) - P(t2)|</code></li>
+  <li>Centered Product:<code class="language-plaintext highlighter-rouge">CP(t1, t2) = (P(t2)-E[P(t2)])*(P(t1)-E[P(t1)])</code>where<code class="language-plaintext highlighter-rouge">E[P(t)]</code> is the mean of the power P at time t</li>
+</ul>
+
+<p class="text-justify">The authors of the article <a href="https://eprint.iacr.org/2010/646.pdf"><em>Statistical Analysis of Second Order Differential Power Analysis</em></a> argue that the Centered Product often yields better results. Let’s try to apply that approach to our power traces.</p>
+
+<p class="text-justify">Once again we start by attacking the output of the first SBox. To do so, we compute the Centered Product<code class="language-plaintext highlighter-rouge">CP(t1, t2)</code>for every<code class="language-plaintext highlighter-rouge">(t1, t2)</code>couple and look for high correlations with <code class="language-plaintext highlighter-rouge">P_th = SBox[pt[0]^K[0]]</code>. Since we are attacking the first SBox, we can save some computing time by just looking at the beginning of the trace (<code class="language-plaintext highlighter-rouge">t &lt; 200</code>).</p>
+
+<p class="text-justify"><em>Note: You may wonder why we use the raw byte value instead of the hamming weight for the power model. Actually, we tried and used both during the CTF, but overall the raw byte value gave better correlations in most cases.</em></p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">second_order_corr</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">window_len</span><span class="p">):</span>
+    <span class="c1"># Compute the power_centered_t for each t over all the traces
+</span>    <span class="c1"># power_centered_t[i] = [Power without noise at t = i for trace 0, Power without noise at t = i for trace 1, ...etc.]
+</span>    <span class="n">power_mean</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">mean</span><span class="p">(</span><span class="n">power</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">power_centered</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">apply_along_axis</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">-</span> <span class="n">power_mean</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">power</span><span class="p">)</span>
+    <span class="n">power_centered_t</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">power_centered</span><span class="p">)</span>
+
+    <span class="c1"># Compute the Centered Product for all (t1, t2) in [0, window_len]^2
+</span>    <span class="n">CP</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">t1</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">window_len</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">t2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">window_len</span><span class="p">):</span>
+            <span class="c1"># CP_t1_t2 == CP_t2_t1, we don't need to do the computation twice
+</span>            <span class="k">if</span> <span class="p">(</span><span class="n">t1</span> <span class="o">&lt;=</span> <span class="n">t2</span><span class="p">):</span>
+                <span class="n">CP_t1_t2</span> <span class="o">=</span> <span class="n">power_centered_t</span><span class="p">[</span><span class="n">t1</span><span class="p">]</span> <span class="o">*</span> <span class="n">power_centered_t</span><span class="p">[</span><span class="n">t2</span><span class="p">]</span>
+                <span class="n">CP</span><span class="p">.</span><span class="n">append</span><span class="p">(((</span><span class="n">t1</span><span class="p">,</span><span class="n">t2</span><span class="p">),</span> <span class="n">CP_t1_t2</span><span class="p">))</span>
+    <span class="n">CP</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">array</span><span class="p">(</span><span class="n">CP</span><span class="p">)</span>
+
+    <span class="c1"># Compute theoretical power for SBox idx output
+</span>    <span class="n">P_th</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">power</span><span class="p">)):</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">"plaintext"</span><span class="p">]</span>
+        <span class="n">K</span>  <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">"key"</span><span class="p">]</span>
+        <span class="n">P_th</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">SBox</span><span class="p">[</span><span class="n">pt</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">^</span><span class="n">K</span><span class="p">[</span><span class="n">idx</span><span class="p">]])</span> <span class="c1"># raw byte value power model
+</span>    <span class="n">P_th</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">array</span><span class="p">(</span><span class="n">P_th</span><span class="p">)</span>
+
+    <span class="c1"># Correlation between P_th and CP
+</span>    <span class="n">correlations</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">window_len</span><span class="p">)]</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">window_len</span><span class="p">)]</span>
+    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">CP</span><span class="p">:</span>
+        <span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">)</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">CP_t1_t2</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">corr</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">np</span><span class="p">.</span><span class="n">corrcoef</span><span class="p">(</span><span class="n">CP_t1_t2</span><span class="p">,</span> <span class="n">P_th</span><span class="p">)[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">correlations</span><span class="p">[</span><span class="n">t1</span><span class="p">][</span><span class="n">t2</span><span class="p">]</span> <span class="o">=</span> <span class="n">corr</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="p">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">corr</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="n">correlations</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">array</span><span class="p">(</span><span class="n">correlations</span><span class="p">)</span>
+
+    <span class="c1"># Get the couple (t1, t2) that gives the best correlation
+</span>    <span class="n">best_corr_idx</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">unravel_index</span><span class="p">(</span><span class="n">np</span><span class="p">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">correlations</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">None</span><span class="p">),</span> <span class="n">correlations</span><span class="p">.</span><span class="n">shape</span><span class="p">)</span>
+
+    <span class="c1"># Plot correlation heat map
+</span>    <span class="n">heatmap2d</span><span class="p">(</span><span class="n">correlations</span><span class="p">,</span> <span class="n">best_corr_idx</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">best_corr_idx</span><span class="p">,</span> <span class="n">correlations</span><span class="p">[</span><span class="n">best_corr_idx</span><span class="p">]</span>
+
+<span class="c1"># Look at the output of the first SBox (0) which is a the beginning of the trace (t &lt; 200)
+</span><span class="n">second_order_corr</span><span class="p">(</span><span class="n">values</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="n">power</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span></code></pre></figure>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/second_order_OK.png" alt="image" /></p>
+
+<p class="text-justify">Nice, the approach seems to work ! We found some interesting correlations around <code class="language-plaintext highlighter-rouge">(23, 143)</code>. Let’s see what happens if we repeat the experiment on the second SBox output:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="c1"># Look at the output of the second SBox (1) which is a further on the power trace (t &lt; 400)
+</span><span class="n">second_order_corr</span><span class="p">(</span><span class="n">values</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="n">power</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">400</span><span class="p">)</span></code></pre></figure>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/second_order_OK2.png" alt="image" /></p>
+
+<p class="text-justify">The best leakage point is<code class="language-plaintext highlighter-rouge">(23,243)</code>for the second SBox. We obtain<code class="language-plaintext highlighter-rouge">t1 = 23</code>once again, it cannot be a mere coincidence ! This seems to confirm that the AES is protected with a masking scheme with the mask applied at<code class="language-plaintext highlighter-rouge">t1 = 23</code>and the masked value manipulated during <code class="language-plaintext highlighter-rouge">t2</code>at the output of each SBox.</p>
+
+<p class="text-justify">Now that we know that the masking is applied around <code class="language-plaintext highlighter-rouge">t1 = 23</code>, we can fix the value of t1 and compute <code class="language-plaintext highlighter-rouge">t2</code> for each SBox.</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">second_order_known_t1</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">window_len</span><span class="p">):</span>
+    <span class="p">...</span>
+    <span class="c1"># Compute the Centered Product
+</span>    <span class="n">CP_t</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">t1</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">22</span><span class="p">,</span> <span class="mi">26</span><span class="p">):</span> <span class="c1"># we know that masks are applied at t1 ~= 23
+</span>        <span class="k">for</span> <span class="n">t2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">window_len</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">t1</span> <span class="o">&lt;=</span> <span class="n">t2</span><span class="p">):</span>
+                <span class="n">CP_t1_t2</span> <span class="o">=</span> <span class="n">power_centered_t</span><span class="p">[</span><span class="n">t1</span><span class="p">]</span> <span class="o">*</span> <span class="n">power_centered_t</span><span class="p">[</span><span class="n">t2</span><span class="p">]</span>
+                <span class="n">CP_t</span><span class="p">.</span><span class="n">append</span><span class="p">(((</span><span class="n">t1</span><span class="p">,</span><span class="n">t2</span><span class="p">),</span> <span class="n">CP_t1_t2</span><span class="p">))</span>
+    <span class="p">...</span>
+
+<span class="k">def</span> <span class="nf">get_leak_indexes</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">):</span>
+    <span class="n">leaks</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">SBox_i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
+        <span class="c1"># window_len = 2400 to look at the whole trace
+</span>        <span class="n">leaks</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">second_order_known_t1</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">SBox_i</span><span class="p">,</span> <span class="mi">2400</span><span class="p">))</span>
+    <span class="c1"># Print results
+</span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">"Leak SBox %02d : %s. (corr = %0.4f)"</span><span class="o">%</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">leaks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">leaks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="c1"># return leak indexex
+</span>    <span class="k">return</span> <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">leaks</span><span class="p">]</span>
+
+<span class="n">get_leak_indexes</span><span class="p">(</span><span class="n">values</span><span class="p">[:</span><span class="mi">2000</span><span class="p">],</span> <span class="n">power</span><span class="p">[:</span><span class="mi">2000</span><span class="p">])</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-console" data-lang="console"><span class="go">Leak SBox 00 : (23, 143). (corr = 0.1838)
+Leak SBox 01 : (23, 248). (corr = 0.1899)
+Leak SBox 02 : (23, 396). (corr = 0.1994)
+Leak SBox 03 : (24, 528). (corr = 0.1984)
+Leak SBox 04 : (23, 660). (corr = 0.1654)
+Leak SBox 05 : (24, 795). (corr = 0.1970)
+Leak SBox 06 : (24, 924). (corr = 0.1780)
+Leak SBox 07 : (25, 1067). (corr = 0.1878)
+Leak SBox 08 : (24, 1188). (corr = 0.1806)
+Leak SBox 09 : (25, 1320). (corr = 0.2026)
+Leak SBox 10 : (24, 1463). (corr = 0.1940)
+Leak SBox 11 : (23, 1569). (corr = 0.1903)
+Leak SBox 12 : (23, 1735). (corr = 0.1907)
+Leak SBox 13 : (24, 1832). (corr = 0.1817)
+Leak SBox 14 : (24, 1991). (corr = 0.1773)
+Leak SBox 15 : (24, 2096). (corr = 0.1814)</span></code></pre></figure>
+
+<p>If we plot all the<code class="language-plaintext highlighter-rouge">t = t2</code>lines on top of any power trace, we can see that they match the output of each SBox:</p>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/power_0_t2.png" alt="image" /></p>
+
+<h2 id="leaking-the-unknown-key">Leaking the unknown key</h2>
+
+<p class="text-justify">Thanks to the work done on the first dataset with known<code class="language-plaintext highlighter-rouge">[plaintext, key]</code>, we have 16 leakage points<code class="language-plaintext highlighter-rouge">L[0], L[1], ..., L[16]</code>that we can use to guess the value of each key byte on the second dataset.</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="n">np</span>
+<span class="n">power_u</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">"./unknown_k/traces.npy"</span><span class="p">)</span>
+<span class="n">values_u</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">"./unknown_k/values.npy"</span><span class="p">)</span></code></pre></figure>
+
+<p class="text-justify">For each unknown key byte<code class="language-plaintext highlighter-rouge">K[i]</code>, we use the leakage point<code class="language-plaintext highlighter-rouge">L[i] = (t1_i, t2_i)</code>to perform a CPA attack as described at the beginning of the article. The only difference is that here we have already chosen the points in time that should give the highest correlation using the first dataset.</p>
+
+<p>For each key guess K_guess:</p>
+<ul>
+  <li>Compute the theoretical power consumption<code class="language-plaintext highlighter-rouge">P_th_guess = SBox[pt[i]^K_guess]</code>(raw byte model) for all the plaintexts<code class="language-plaintext highlighter-rouge">pt</code></li>
+  <li>Compute the Centered Product <code class="language-plaintext highlighter-rouge">CP = CP(t1_i, t2_i)</code> for all the plaintexts</li>
+  <li>Compute the correlation between<code class="language-plaintext highlighter-rouge">CP</code>and<code class="language-plaintext highlighter-rouge">P_th_guess</code></li>
+  <li>The highest correlation should correspond to<code class="language-plaintext highlighter-rouge">K_guess = K[i]</code></li>
+</ul>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">do_cpa</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">L</span><span class="p">):</span>
+
+    <span class="c1"># Compute centered product
+</span>    <span class="n">power_mean</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">mean</span><span class="p">(</span><span class="n">power</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">power_centered</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">apply_along_axis</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">-</span> <span class="n">power_mean</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">power</span><span class="p">)</span>
+    <span class="n">power_centered_t</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">power_centered</span><span class="p">)</span>
+    <span class="n">CP</span> <span class="o">=</span> <span class="n">power_centered_t</span><span class="p">[</span><span class="n">L</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">*</span> <span class="n">power_centered_t</span><span class="p">[</span><span class="n">L</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+
+    <span class="n">max_idx</span>  <span class="o">=</span> <span class="bp">None</span>
+    <span class="n">max_corr</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="c1"># For each key guess, compute theoretical power and correlation with CP
+</span>    <span class="k">for</span> <span class="n">K_guess</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">256</span><span class="p">):</span>
+        <span class="c1"># Theoritcal power for key guess
+</span>        <span class="n">P_th_guess</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="s">"plaintext"</span><span class="p">])):</span>
+            <span class="n">P_th_guess</span><span class="p">.</span><span class="n">append</span><span class="p">((</span><span class="n">SBox</span><span class="p">[</span><span class="n">K_guess</span> <span class="o">^</span> <span class="n">values</span><span class="p">[</span><span class="s">"plaintext"</span><span class="p">][</span><span class="n">i</span><span class="p">][</span><span class="n">idx</span><span class="p">]]))</span>
+        <span class="n">P_th_guess</span> <span class="o">=</span> <span class="n">np</span><span class="p">.</span><span class="n">array</span><span class="p">(</span><span class="n">P_th_guess</span><span class="p">)</span>
+
+        <span class="c1"># Correlation with CP
+</span>        <span class="n">corr</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">np</span><span class="p">.</span><span class="n">corrcoef</span><span class="p">(</span><span class="n">CP</span><span class="p">,</span> <span class="n">P_th_guess</span><span class="p">)[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="c1"># Get maximum correlation
+</span>        <span class="k">if</span> <span class="n">max_corr</span> <span class="o">==</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">corr</span> <span class="o">&gt;</span> <span class="n">max_corr</span><span class="p">:</span>
+            <span class="n">max_idx</span>  <span class="o">=</span> <span class="n">K_guess</span>
+            <span class="n">max_corr</span> <span class="o">=</span> <span class="n">corr</span>
+
+    <span class="k">print</span><span class="p">(</span><span class="s">"Found max correlation for K[%d] =  %s (%f)"</span><span class="o">%</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="nb">chr</span><span class="p">(</span><span class="n">max_idx</span><span class="p">),</span> <span class="n">max_corr</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="nb">chr</span><span class="p">(</span><span class="n">max_idx</span><span class="p">),</span> <span class="n">max_corr</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="c1"># Get leaks using first dataset
+</span><span class="n">N_traces</span> <span class="o">=</span> <span class="mi">10000</span>
+<span class="n">leaks</span> <span class="o">=</span> <span class="n">get_leak_indexes</span><span class="p">(</span><span class="n">values</span><span class="p">[:</span><span class="n">N_traces</span><span class="p">],</span> <span class="n">power</span><span class="p">[:</span><span class="n">N_traces</span><span class="p">])</span>
+
+<span class="c1"># CPA attack on each byte of the key for the second dataset
+</span><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
+    <span class="n">do_cpa</span><span class="p">(</span><span class="n">values_u</span><span class="p">,</span> <span class="n">power_u</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">leaks</span><span class="p">[</span><span class="n">i</span><span class="p">])</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-console" data-lang="console"><span class="go">Found max correlation for K[0] =  T (0.258149)
+Found max correlation for K[1] =  h (0.295765)
+Found max correlation for K[2] =  a (0.299622)
+Found max correlation for K[3] =  Õ (0.205122)
+Found max correlation for K[4] =  s (0.253593)
+Found max correlation for K[5] =  Ë (0.218147)
+Found max correlation for K[6] =  m (0.200352)
+Found max correlation for K[7] =  Ñ (0.212255)
+Found max correlation for K[8] =    (0.249555)
+Found max correlation for K[9] =   (0.243846)
+Found max correlation for K[10] =  ¨ (0.200326)
+Found max correlation for K[11] =  0 (0.205650)
+Found max correlation for K[12] =   (0.201208)
+Found max correlation for K[13] =   (0.251059)
+Found max correlation for K[14] =  § (0.212484)
+Found max correlation for K[15] =  u (0.303568)</span></code></pre></figure>
+
+<p class="text-justify">Mmmmh, it seems that only some of the bytes are correct… Our approach does not work perfectly; probably because we only have 200 power traces for the unknown key. Still, it feels like we are pretty close to the solution and after all these efforts, we are not going to go home without the flag.</p>
+
+<p>Time to get a bit dirty.</p>
+
+<h2 id="using-the-bruteforce">Using the (Brute)Force</h2>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/use_the_force.webp" alt="image" /></p>
+
+<p class="text-justify">First of all, we know that the AES key is the flag of the challenge, therefore it should be composed of printable characters.</p>
+
+<p class="text-justify">Then, we observed that when modifying the number of traces<code class="language-plaintext highlighter-rouge">N</code>used to compute the leakage points, the second coordinate <code class="language-plaintext highlighter-rouge">t2</code> of some of these points would vary while others would remain unchanged. For instance:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">N = 10000 =&gt; L[12] = (24, 1727) =&gt; K[12] = ' ' (0.201208)</code></li>
+  <li><code class="language-plaintext highlighter-rouge">N = 50000 =&gt; L[12] = (24, 1716) =&gt; K[12] = g (0.27219)</code></li>
+</ul>
+
+<p>But:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">N = 10000 or N = 50000 =&gt; L[2] = (24, 396) =&gt; K[2] = a (0.299622 &gt; 0.25)</code></li>
+</ul>
+
+<p>This shows that the location of the leakage point is unstable for some SBox.</p>
+
+<p class="text-justify">Another observation we made by experimenting a bit, was that using the hamming distance instead of the raw bytes during the CPA could sometimes give interesting results.</p>
+
+<p class="text-justify">Therefore, we wrote a short script to do the CPA on all the points of a rectangle around each computed leakage point L, using both the raw byte value and the hamming weight. The idea is that if we are able to guess enough bytes of the key this way, we will be able to bruteforce the missing bytes by performing AES using a known<code class="language-plaintext highlighter-rouge">[plaintext, ciphertext]</code>couple.</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">def</span> <span class="nf">bruteforce_cpa</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">L</span><span class="p">):</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">"[*] Bruteforce K[%d]"</span><span class="o">%</span><span class="p">(</span><span class="n">idx</span><span class="p">),</span> <span class="n">end</span><span class="o">=</span> <span class="s">' : '</span><span class="p">)</span>
+
+    <span class="n">possible_k</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+    <span class="c1"># Define a bruteforce rectangle around the leaking point L
+</span>    <span class="n">bf_t1_range</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">bf_t2_range</span> <span class="o">=</span> <span class="mi">30</span>
+
+    <span class="c1"># Perform the CPA for all the points of the rectangle
+</span>    <span class="c1"># Select the potential key bytes that are printable and
+</span>    <span class="c1"># have a correlation &gt; 0.25. The value has been defined
+</span>    <span class="c1"># by experimenting a bit and looking at the correlation
+</span>    <span class="c1"># value of the good and wrong looking key bytes
+</span>    <span class="k">for</span> <span class="n">t1</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">L</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">bf_t1_range</span><span class="p">,</span> <span class="n">L</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">bf_t1_range</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">t2</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">L</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">bf_t2_range</span><span class="p">,</span> <span class="n">L</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">bf_t2_range</span><span class="p">):</span>
+            <span class="c1"># Raw byte power model
+</span>            <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">corr</span><span class="p">)</span> <span class="o">=</span> <span class="n">do_cpa</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="p">[</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">],</span> <span class="n">hamming_mode</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">corr</span> <span class="o">&gt;</span> <span class="mf">0.25</span> <span class="ow">and</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">string</span><span class="p">.</span><span class="n">printable</span> <span class="p">:</span>
+                <span class="n">possible_k</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">possible_k</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="c1"># Hamming power model
+</span>            <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">corr</span><span class="p">)</span> <span class="o">=</span> <span class="n">do_cpa</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">power</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="p">[</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">],</span> <span class="n">hamming_mode</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">corr</span> <span class="o">&gt;</span> <span class="mf">0.25</span> <span class="ow">and</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">string</span><span class="p">.</span><span class="n">printable</span> <span class="p">:</span>
+                <span class="n">possible_k</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">possible_k</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="c1"># Sort possible keys by number of occurrences
+</span>    <span class="n">possible_k</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">possible_k</span><span class="p">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="o">-</span><span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="k">print</span><span class="p">(</span><span class="n">possible_k</span><span class="p">)</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">):</span>
+    <span class="n">bruteforce_cpa</span><span class="p">(</span><span class="n">values_u</span><span class="p">,</span> <span class="n">power_u</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">leaks</span><span class="p">[</span><span class="n">i</span><span class="p">])</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="s">'''
+[*] Bruteforce K[0] : {'T': 24, 'R': 8, ...}          &lt;- T
+[*] Bruteforce K[1] : {'h': 12, '9': 7, ...}          &lt;- h  (medium occurences, but "Thats" looks good)
+[*] Bruteforce K[2] : {'a': 19, 'Z': 6, ...}          &lt;- a
+[*] Bruteforce K[3] : {'F': 8, 't': 7,  ...}          &lt;- t  (F and t are close and have low occurences, but "Thats" looks good)  
+[*] Bruteforce K[4] : {'s': 25, 'J': 16, ...}         &lt;- s
+[*] Bruteforce K[5] : {' ': 43, '</span><span class="se">\\</span><span class="s">': 13', ...}       &lt;- ' '
+[*] Bruteforce K[6] : {'m': 10, 'I': 8, ...}          &lt;- (m, I) (medium occurrences)
+[*] Bruteforce K[7] : {'`': 11, 'h': 5, ...}          &lt;- seems bad
+[*] Bruteforce K[8] : {' ': 19, '[': 6, ...}          &lt;- ' '
+[*] Bruteforce K[9] : {'M': 8, '3': 6, ...}           &lt;- (M, 3) with low occurrences -&gt; seems bad
+[*] Bruteforce K[10] : {'u': 19, 't': 9, ...}         &lt;- u
+[*] Bruteforce K[11] : {'(': 13, '}': 3, ...}         &lt;- seems bad
+[*] Bruteforce K[12] : {'X': 12, 'g': 11, 'M': 9,...} &lt;- (X, g, M) (medium occurrences)
+[*] Bruteforce K[13] : {' ': 30, 'A': 8, ...}         &lt;- ' '
+[*] Bruteforce K[14] : {'`': 8, ...}                  &lt;- seems bad
+[*] Bruteforce K[15] : {'I': 9, 'u': 8, ...}          &lt;- (I, u) (low occurrences but we got some pretty high correlation (0.30) for 'u' during the first try)
+'''</span></code></pre></figure>
+
+<p style="text-align: center;"><img src="../assets/img/random_learn/flag_guess.PNG" alt="image" /></p>
+
+<p class="text-justify">It worked ! We are now pretty confident about 9 bytes of the key and have few candidates for 3 other bytes. This is more than enough information to perform a quick dirty inefficient AES bruteforce with Python on a known<code class="language-plaintext highlighter-rouge">[plaintext, ciphertext]</code> couple:</p>
+
+<figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="kn">from</span> <span class="nn">Crypto.Cipher</span> <span class="kn">import</span> <span class="n">AES</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="c1"># Known plaintext/ciphetext
+</span><span class="n">pt</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">67</span><span class="p">,</span>  <span class="mi">62</span><span class="p">,</span> <span class="mi">206</span><span class="p">,</span> <span class="mi">141</span><span class="p">,</span>  <span class="mi">38</span><span class="p">,</span>  <span class="mi">55</span><span class="p">,</span>  <span class="mi">87</span><span class="p">,</span>   <span class="mi">2</span><span class="p">,</span> <span class="mi">178</span><span class="p">,</span>  <span class="mi">64</span><span class="p">,</span> <span class="mi">179</span><span class="p">,</span> <span class="mi">137</span><span class="p">,</span> <span class="mi">155</span><span class="p">,</span>  <span class="mi">28</span><span class="p">,</span>  <span class="mi">17</span><span class="p">,</span> <span class="mi">169</span><span class="p">])</span>
+<span class="n">ct</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">([</span><span class="mi">125</span><span class="p">,</span>  <span class="mi">50</span><span class="p">,</span> <span class="mi">240</span><span class="p">,</span> <span class="mi">162</span><span class="p">,</span> <span class="mi">229</span><span class="p">,</span>  <span class="mi">37</span><span class="p">,</span> <span class="mi">237</span><span class="p">,</span> <span class="mi">229</span><span class="p">,</span> <span class="mi">142</span><span class="p">,</span> <span class="mi">159</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">156</span><span class="p">,</span> <span class="mi">135</span><span class="p">,</span> <span class="mi">231</span><span class="p">,</span>  <span class="mi">51</span><span class="p">,</span> <span class="mi">211</span><span class="p">])</span>
+
+<span class="c1"># Dirty BF
+</span>
+<span class="c1"># The key seems to be made of space and letters
+</span><span class="n">unknown_byte_search_space</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">chr</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mh">0x41</span><span class="p">,</span> <span class="mh">0x7B</span><span class="p">)))</span> <span class="o">+</span> <span class="p">[</span><span class="s">' '</span><span class="p">]</span>
+<span class="k">for</span> <span class="n">k6</span> <span class="ow">in</span> <span class="s">'mI'</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">k7</span> <span class="ow">in</span> <span class="n">unknown_byte_search_space</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">k9</span> <span class="ow">in</span> <span class="n">unknown_byte_search_space</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">k11</span> <span class="ow">in</span> <span class="n">unknown_byte_search_space</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">k12</span> <span class="ow">in</span> <span class="s">'XgM'</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">k14</span> <span class="ow">in</span> <span class="n">unknown_byte_search_space</span><span class="p">:</span>
+                        <span class="k">for</span> <span class="n">k15</span> <span class="ow">in</span> <span class="s">'Iu'</span><span class="p">:</span>
+                            <span class="n">key</span> <span class="o">=</span> <span class="s">'Thats '</span><span class="o">+</span><span class="n">k6</span><span class="o">+</span><span class="n">k7</span><span class="o">+</span><span class="s">' '</span><span class="o">+</span><span class="n">k9</span><span class="o">+</span> <span class="s">'u'</span><span class="o">+</span><span class="n">k11</span><span class="o">+</span><span class="n">k12</span><span class="o">+</span><span class="s">' '</span><span class="o">+</span><span class="n">k14</span><span class="o">+</span><span class="n">k15</span>
+                            <span class="n">cipher</span> <span class="o">=</span> <span class="n">AES</span><span class="p">.</span><span class="n">new</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">AES</span><span class="p">.</span><span class="n">MODE_ECB</span><span class="p">)</span>
+                            <span class="k">if</span> <span class="n">cipher</span><span class="p">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">pt</span><span class="p">)</span> <span class="o">==</span> <span class="n">ct</span><span class="p">:</span>
+                                <span class="k">print</span><span class="p">(</span><span class="s">"Flag : "</span><span class="o">+</span><span class="n">key</span><span class="p">)</span>
+                                <span class="n">sys</span><span class="p">.</span><span class="nb">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-console" data-lang="console"><span class="go">Flag : That's my Kung Fu</span></code></pre></figure>
+
+<h2 id="conclusion">Conclusion</h2>
+<p class="text-justify">After a lot of paper reading and experimentation, we manage to solve this challenge with no prior side channel experience. Thanks to the <a href="https://twitter.com/DonjonLedger">Donjon Ledger</a> team for organizing this CTF and providing such a great learning opportunity.</p>
+<p class="text-justify">On a side note, it’s likely that the second order CPA was not the intended solution. Indeed, the title and set-up of the challenge were more hinting toward a template / machine learning based solution. Moreover, we obviously abused the fact that the key was composed of printable characters in our approach. I hope that other write ups will be published so we can have more details about the intended solutions.</p>
+
+<p class="text-justify">One more thing. While I was writing this article, I stumbled upon something that could have saved me a bit of time during the challenge:</p>
+<p style="text-align: center;"><img src="../assets/img/random_learn/kungfu.png" alt="image" /></p>
+
+<p>Well, I guess I need to do crypto more often…</p>
+
+
+      <div class="page-footer">
+        <div class="page-tag">
+          
+        </div>
+      </div>
+      <section class="comment-area">
+  <div class="comment-wrapper">
+    
+  </div>
+</section> <!-- End Comment Area -->
+
+    </div> <!-- End Wrap Content -->
+  </div> <!-- End Page Content -->
+</article> <!-- End Article Page -->
+
+</div>
+
+  </div>
+  
+  <script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+  ga('create', '', 'auto');
+  ga('send', 'pageview');
+</script> <!-- End Analytics -->
+
+</body>
+</html>

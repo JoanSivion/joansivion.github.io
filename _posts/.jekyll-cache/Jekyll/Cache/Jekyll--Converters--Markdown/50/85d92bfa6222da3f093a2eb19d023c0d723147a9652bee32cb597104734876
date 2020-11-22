@@ -1,0 +1,6 @@
+I"Ç<p style="text-align: center;"><img src="../assets/img/picohsm/board.jpg" width="450" height="325" /></p>
+<h1 id="introduction">Introduction</h1>
+<p>This article presents one (very hard) way of solving the picoHSM challenge series released during the Donjon Ledger 2020 CTF. This harware/pwn challenge was divided into three steps involving <strong>buffer overflow</strong> exploitation, a <strong>timing attack</strong> and a <strong>clock glitching attack</strong> on a remote board running STM32 and ATMEGA128 microcontrollers.</p>
+
+<p>Because of an initial confusion during step 1, I thought that the stack was not executable and ended up building overly complicated exploits using ROP for step 2 and 3. Apparently, stack was not really located where I thought it was and was executable. Anyway, even though there were easier solutions to this challenge, I still had a lot of fun doing it and it was nice to get some practice on embedded system exploitation.</p>
+:ET
