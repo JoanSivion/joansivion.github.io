@@ -2,7 +2,7 @@ title: JoanSivion Security Blog
 description: > # this means to ignore newlines until "baseurl:"
   JoanSivion Security Blog
 permalink: ':title/'
-baseurl: "/blog" # the subpath of your site, e.g. /blog
+baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://joansivion.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 site-twitter: #if your site has a twitter account, enter it here
 
