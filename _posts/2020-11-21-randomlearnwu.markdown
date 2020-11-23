@@ -22,6 +22,7 @@ Kudos to my teammate i27, who did an important part of the work for this challen
 
 ## Initial data
 The target for this challenge is an AES execution on a "non-secure" MCU (*Microcontroller Unit*). The following datasets are provided:
+{: .text-justify}
 
 * ```variable_k_p```: 200000 power traces with random known plaintexts and keys;
 * ```unknown_k```: 200 power traces where known plaintexts have been encrypted with the same unknown key.
@@ -38,6 +39,7 @@ values = np.load("./variable_k_p/values.npy")
 
 ## What exactly are we looking at ?
 Let's plot one power trace to get a better idea of which part of the AES execution we are dealing with:
+{: .text-justify}
 
 {% highlight python %}
 import matplotlib.pyplot as plt
@@ -72,6 +74,7 @@ To perform a CPA, you first need to **define a model for the power consumption**
 {: refdef}
 
 *Note : The raw byte value can also be chosen in place of the hamming weight. Both are used in the resolution of this challenge and give interesting results.*
+{: .text-justify}
 
 Then, you must **pick an intermediate value that you will target** in the cryptographic algorithm. The idea is to choose a value that depends on the key so you can use it to make key guesses later in the attack. In the case of AES, interesting targets can be identified by looking at the SubBytes operation of the first round:
 {: .text-justify}
@@ -81,6 +84,7 @@ Then, you must **pick an intermediate value that you will target** in the crypto
 {: refdef}
 
 By targeting **a byte of the state at each SBox output**, we can use the CPA to guess the key bytes```K[i]```one by one. The different steps to perform this attack are the following ones:
+{: .text-justify}
 * Measure the real power consumption```P```for many different plaintexts```pt```;
 * For each key guess K_guess:
   - Compute the theoretical power consumption```P_th_guess = hamming(SBox[pt[i]^K_guess])```for all the plaintexts```pt```
@@ -99,6 +103,7 @@ Given a sufficient amount of power traces, this approach can be used to easily r
 
 ## First (naive) CPA attempt
 Now that we have a bit more background on CPA attacks, let's get back to the challenge.
+{: .text-justify}
 
 The first step of the analysis is to verify on the dataset with known```[plaintext, key]```that we obtain high correlations at the output of each SBox. We will then be able to use these **leakage points** to perform the CPA attack on the dataset with the unknown key.
 {: .text-justify}
@@ -146,6 +151,7 @@ Aaaaaaand... it didn't work. Unfortunately, there is no correlation spike hidden
 * Looking for correlations using the values of the key bytes ```K[i]``` instead of the SBox outputs.
 
 The first test did not give anything interesting. For the second test, none of the key bytes yielded a high correlation except```K[15]```:
+{: .text-justify}
 
 {:refdef: style="text-align: center;"}
 ![image](../assets/img/random_learn/leak_k15.png)
@@ -303,6 +309,7 @@ Leak SBox 15 : (24, 2096). (corr = 0.1814)
 {% endhighlight %}
 
 If we plot all the```t = t2```lines on top of any power trace, we can see that they match the output of each SBox:
+{: .text-justify}
 
 {:refdef: style="text-align: center;"}
 ![image](../assets/img/random_learn/power_0_t2.png)
@@ -415,6 +422,7 @@ But:
 * ```N = 10000 or N = 50000 => L[2] = (24, 396) => K[2] = a (0.299622 > 0.25)```
 
 This shows that the location of the leakage point is unstable for some SBox.
+{: .text-justify}
 
 Another observation we made by experimenting a bit, was that using the hamming distance instead of the raw bytes during the CPA could sometimes give interesting results.
 {: .text-justify}
@@ -529,7 +537,7 @@ One more thing. While I was writing this article, I stumbled upon something that
 {: refdef}
 
 Well, I guess I need to do crypto more often...
-
+{: .text-justify}
 
 [donjon-ledger]:https://twitter.com/DonjonLedger
 [chipwhisperer]:https://rtfm.newae.com/
