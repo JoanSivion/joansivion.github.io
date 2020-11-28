@@ -6,9 +6,6 @@ img: ./random_learn/ledger.png # Add image post (optional)
 description: Ledger side-channel challenge solved with 2nd order CPA
 ---
 
-{:refdef: style="text-align: center;"}
-![image](../assets/img/random_learn/ledger.png)
-{: refdef}
 
 ## Introduction
 This article presents one way of solving the Random Learn side channel challenge released during the Donjon Ledger 2020 CTF. In side channel challenges, the goal is to retrieve the secret key of a cryptographic algorithm using physical measurements performed while the device was operating (time, power, electromagnetic emanations, temperature...).
