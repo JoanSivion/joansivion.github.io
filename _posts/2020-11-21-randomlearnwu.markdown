@@ -518,7 +518,7 @@ for k6 in 'mI':
 {% endhighlight %}
 
 {% highlight console %}
-Flag : That's my Kung Fu
+Flag : Thats my Kung Fu
 {% endhighlight %}
 
 ## Conclusion
