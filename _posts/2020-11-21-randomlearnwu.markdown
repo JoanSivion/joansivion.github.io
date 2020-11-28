@@ -48,7 +48,7 @@ plt.show()
 ![image](../assets/img/random_learn/power0.png)
 {: refdef}
 
-A pattern is repeated 16 times in the power trace. This shows that **each byte of the AES state is manipulated independently**, meaning that we are probably dealing with a **8-bit MCU** (on a 32-bits MCU, we might have observed one pattern repeated 4 times). Moreover, the description of the challenge indicates that the "beginning of the AES execution" was captured, so we are probably somewhere inside the **first round**.
+A pattern is repeated 16 times in the power trace. This shows that **each byte of the AES state is manipulated independently**. Moreover, the description of the challenge indicates that the "beginning of the AES execution" was captured, so we are probably somewhere inside the **first round**.
 {: .text-justify}
 
 Since it's a classic approach to target SBox outputs in side channel attacks, I am going to make the hypothesis that the power measurement was performed during the **SubBytes** operation (one pattern = one SBox substitution).
