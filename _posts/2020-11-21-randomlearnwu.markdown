@@ -2,7 +2,7 @@
 layout: post
 title: "Donjon Ledger CTF 2020: Random Learn"
 date: 2020-11-22 13:32:20 +0300
-img: # Add image post (optional)
+img:../assets/img/random_learn/ledger.png # Add image post (optional)
 description: Side channel challenge write up
 ---
 
