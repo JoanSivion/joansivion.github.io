@@ -6,6 +6,22 @@ img: ./qilinglabs/qiling_small.png # Add image post (optional)
 description: Write up for Qiling Labs (@ShielderSec)
 ---
 
+- [Introduction](#introduction)
+- [Setup](#setup)
+- [Challenges](#challenges)
+  - [Challenge 1 : Memory mapping](#challenge-1--memory-mapping)
+  - [Challenge 2 : Syscall return hijack](#challenge-2--syscall-return-hijack)
+  - [Challenge 3 : FS & Syscall hijack](#challenge-3--fs--syscall-hijack)
+  - [Challenge 4 : Hook address 1](#challenge-4--hook-address-1)
+  - [Challenge 5 : External function hooking 1](#challenge-5--external-function-hooking-1)
+  - [Challenge 6 : Hook address 2](#challenge-6--hook-address-2)
+  - [Challenge 7 : External function hooking 2](#challenge-7--external-function-hooking-2)
+  - [Challenge 8 : Find a structure in memory](#challenge-8--find-a-structure-in-memory)
+  - [Challenge 9 : External function hooking 2](#challenge-9--external-function-hooking-2)
+  - [Challenge 10 : Hijack FS](#challenge-10--hijack-fs)
+  - [Challenge 11 : Hooking instructions](#challenge-11--hooking-instructions)
+  - [Yay!](#yay)
+- [Conclusion](#conclusion)
 
 ## Introduction
 A few days ago, [Th3Zer0][TheZero] from the IT security company [Shielder][shielder] published the **Qiling Labs** challenge :
